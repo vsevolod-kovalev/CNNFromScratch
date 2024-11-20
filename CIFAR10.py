@@ -8,7 +8,8 @@ class CIFAR10:
             images = batch[b'data']
             labels = batch[b'labels']
             
-            images = [images[i].reshape(32, 32, 3) / 255.0 for i in range(len(images))]
+            # image input format:       channel  x   width   x   height
+            images = [images[i].reshape(3, 32, 32) / 255.0 for i in range(len(images))]
         
         return images, labels
 
