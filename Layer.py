@@ -8,16 +8,30 @@ class Layer:
         self.output = None
 
 class Conv2D(Layer):
-    def __init__(self, filters: int, kernel_size: int, strides: int, padding: int):
+    def __init__(self, filters: int, kernel_size: int, strides: int, padding: str):
         super().__init__()
         self.weights = []
         self.biases = [random.uniform(-RANDOM_WEIGHT_RANGE, RANDOM_WEIGHT_RANGE) for _ in range(filters)]
         self.num_filters = filters
         self.kernel_size = kernel_size
         self.strides = strides
+        if not (padding == 'same' or padding == 'valid'):
+            raise Exception("Unknown padding format. Conv2D padding can be \'valid\' or \'same\'.")
         self.padding = padding
+    @staticmethod
+    def add_padding(input, padding):
+        depth, height, width = len(input), len(input[0]), len(input[0][0])
+        padded_input = [
+            [[0.0 for _ in range(width + 2 * padding)]
+                  for __ in range(height + 2 * padding)]
+                  for ___ in range(depth)
+        ]
+        for i in range(depth):
+            for j in range(height):
+                for k in range(width):
+                    padded_input[i][j + padding][k + padding] = input[i][j][k]
+        return padded_input
     def forward(self, input):
-        output = []
         depth, height, width = len(input), len(input[0]), len(input[0][0])
         if not self.weights:
             self.weights = [
@@ -31,13 +45,22 @@ class Conv2D(Layer):
                 ]
                 for _ in range(self.num_filters)
             ]
+        padding = 0
+        if self.padding == 'same':
+            # calculate the neccesary padding to maintain the input size:
+            padding = (self.strides * width - self.strides - width + self.kernel_size) / 2
+        if padding % 1 != 0 or padding < 1:
+            raise Exception("Padding must be a positive integer.")
+        padding = int(padding)
+        output = []
         if width != height:
             raise Exception("Input width must be the same as input height.")
-        feature_map_size = (width + self.padding * 2 - self.kernel_size) / self.strides + 1
+        feature_map_size = (width + padding * 2 - self.kernel_size) / self.strides + 1
         if feature_map_size % 1 != 0 or feature_map_size < 1:
-            raise Exception("Feature map size is negative or not an integer.")
+            raise Exception("Feature map size must be a positive integer.")
         feature_map_size = int(feature_map_size)
-        
+        if padding:
+            input = Conv2D.add_padding(input, padding)
         for filter_index in range(self.num_filters):
             feature_map = [
                 [0.0 for _ in range(feature_map_size)] for __ in range(feature_map_size)
@@ -53,7 +76,7 @@ class Conv2D(Layer):
                                 input_i = starting_i * self.strides + weight_i
                                 input_j = starting_j * self.strides + weight_j
                                 filter_weight = self.weights[filter_index][weight_i][weight_j][input_k]
-                                _sum += filter_weight * input[input_k][input_j][input_k]
+                                _sum += filter_weight * input[input_k][input_i][input_j]
                     # Add bias
                     filter_bias = self.biases[filter_index]
                     feature_map[starting_i][starting_j] = _sum + filter_bias
@@ -65,7 +88,6 @@ class AveragePooling2D(Layer):
         super().__init__()
         self.pool_size = pool_size
         self.strides = strides
-
     def forward(self, input):
         output = []
         depth, height, width = len(input), len(input[0]), len(input[0][0])
@@ -96,12 +118,11 @@ class AveragePooling2D(Layer):
         print(self.output)
         return output
 
-            
-c = Conv2D(6, 2, 1, 0)
+c = Conv2D(filters = 6, kernel_size = 3, strides = 1, padding = 'same')
 step_1 = c.forward(
     [[[1.0 for _ in range(4)] for _ in range(4)] for _ in range(3)]
 )
-b = AveragePooling2D(2, 1)
+b = AveragePooling2D(pool_size = 2, strides = 2)
 step_2 = b.forward(step_1)
 
 
