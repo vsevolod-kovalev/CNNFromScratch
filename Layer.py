@@ -2,22 +2,37 @@ import random
 
 RANDOM_WEIGHT_RANGE = 0.1
 
-# assuming l has even row and column distibution
-def shape(l):
-    shape = []
-    while True:
-        if isinstance(l, list):
-            shape.append(len(l))
-            l = l[0]
-        else:
-            break
-    return shape
-
 class Layer:
     def __init__(self):
         self.input = None
         self.preactivation = None
         self.output = None
+    # assuming l has even row and column distibution
+    @staticmethod
+    def shape(_list):
+        shape = []
+        while True:
+            if isinstance(_list, list):
+                shape.append(len(_list))
+                _list = _list[0]
+            else:
+                break
+        return shape
+
+class Flatten(Layer):
+    def __init__(self):
+        super().__init__()
+    def forward(self, input):
+        output = []
+        def access(_list):
+            if not isinstance(_list, list):
+                output.append(_list)
+                return
+            for i in range(len(_list)):
+                access(_list[i])
+        access(input)
+        self.output = output
+        return self.output
 
 class Conv2D(Layer):
     def __init__(self, filters: int, kernel_size: int, strides: int, padding: str, activation_function: str):
@@ -162,7 +177,10 @@ step_1 = c.forward(
 )
 b = AveragePooling2D(pool_size = 2, strides = 2)
 step_2 = b.forward(step_1)
-print(step_2, shape(step_2))
+print(step_2, Layer.shape(step_2))
+a = Flatten()
+step_3 = a.forward(step_2)
+print(step_3, Layer.shape(step_3))
 
 
                     
