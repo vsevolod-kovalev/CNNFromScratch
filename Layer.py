@@ -1,4 +1,5 @@
 import random
+import math
 
 RANDOM_WEIGHT_RANGE = 0.1
 
@@ -7,11 +8,14 @@ class Layer:
         self.input = None
         self.preactivation = None
         self.output = None
-    
-    def activate(self, Z, activation: str):
+        self.weight_deltas = None
+        self.bias_deltas = None
+    def activate(self, Z, activation: str, derivative: bool = False):
         match activation.lower():
             case 'relu':
-                return self.reLU(Z)
+                return self.reLU(Z, derivative = derivative)
+            case 'softmax':
+                return self.softmax(Z, derivative = derivative)
             case _:
                 raise Exception("Unknown activation function")
     # assuming l has even row and column distibution
@@ -42,6 +46,7 @@ class Flatten(Layer):
         return self.output
 class Dense(Layer):
     def __init__(self, num_neurons: int, activation: str):
+        super().__init__()
         self.num_neurons = num_neurons
         self.weights = []
         self.biases = [random.uniform(-RANDOM_WEIGHT_RANGE, RANDOM_WEIGHT_RANGE) for _ in range(num_neurons)]
@@ -52,7 +57,42 @@ class Dense(Layer):
         for z in Z:
             output.append(relu(z))
         return output
+    def softmax(self, Z, derivative: bool = False):    
+        if derivative:
+            # the derivative of softmax in combination with 
+            # sparse categorical cross entropy simplifies to
+            # Y_hat - Y and passed to the output layer directly. 
+            # Thus, ∂a/∂z should not have any additional effects.
+            return [1.0 for _ in range(len(Z))]
+        # Shift every z by z_max to prevent overflow
+        z_max = max(Z)
+        z_exp = [math.exp(z - z_max) for z in Z]
+        z_sum = sum(z_exp)
+        output = [z / z_sum for z in z_exp]
+        return output
+    def backward(self, gradient):
+        if not (self.weight_deltas and self.bias_deltas):
+            self.weight_deltas = [[0.0 for _ in range(len(self.weights[0]))] for _ in range(self.num_neurons)]
+            self.bias_deltas = [0.0 for _ in range(self.num_neurons)]
+        # gradient to be propagated to the previous layer:
+        output = [0.0 for _ in range(len(self.input))]
+        Z = self.preactivation
+        dA_dZ = self.activate(Z, activation = self.activation_function, derivative=True)
+        for neuron_index in range(self.num_neurons):
+            # ∂z/∂b == C 
+            da_dz = dA_dZ[neuron_index]
+            self.bias_deltas[neuron_index] = gradient[neuron_index] * da_dz
+            for weight_index, weight in enumerate(self.weights[neuron_index]):
+                # Calculate deltas
+                # by adding     ∂a/∂z * ∂z/∂w    to the chain sequence.
+                dz_dw = self.input[weight_index]
+                self.weight_deltas[neuron_index][weight_index] = gradient[neuron_index] * da_dz * dz_dw
+                # the size of the input layer matches the number of weights in a neuron:
+                output[weight_index] += gradient[neuron_index] * da_dz * weight
+        return output
+
     def forward(self, input):
+        self.input = input
         Z = []
         input_size = len(input)
         if not self.weights:
@@ -202,24 +242,24 @@ class AveragePooling2D(Layer):
         self.output = output
         return output
 
+input = [[[1.0 for _ in range(4)] for _ in range(4)] for _ in range(3)]
+layers = [
+          Conv2D(filters = 6, kernel_size = 3, strides = 1, padding = 'same', activation = 'relu'),
+          AveragePooling2D(pool_size = 2, strides = 2),
+          Flatten(),
+          Dense(10, 'relu'),
+          Dense(10, 'softmax')
+        ]
+Y = [0 if i != 5 else 1 for i in range(10)]
 
-
-
-c = Conv2D(filters = 6, kernel_size = 3, strides = 1, padding = 'same', activation = 'relu')
-step_1 = c.forward(
-    [[[1.0 for _ in range(4)] for _ in range(4)] for _ in range(3)]
-)
-b = AveragePooling2D(pool_size = 2, strides = 2)
-step_2 = b.forward(step_1)
-print(step_2, Layer.shape(step_2))
-a = Flatten()
-step_3 = a.forward(step_2)
-print(step_3, Layer.shape(step_3))
-f = Dense(10, 'relu')
-step_4 = f.forward(step_3)
-print(step_4, Layer.shape(step_4))
-
-
-                    
-
-        
+output = input
+for layer_index, layer in enumerate(layers):
+    print(layer_index, "\t", output, "\t", Layer.shape(output))
+    output = layer.forward(output)
+print("OUTPUT\t", output, "\t", Layer.shape(output))
+# sparse categorical cross entropy + softmax in the output layer
+loss_gradient = [y_hat - y for y_hat, y in zip(output, Y)]
+print("Actual values\t", Y)
+print("Loss gradient\t", loss_gradient)
+b = layers[-1].backward(loss_gradient)
+print(b, Layer.shape(b))
