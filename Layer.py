@@ -33,8 +33,26 @@ class Layer:
 class Flatten(Layer):
     def __init__(self):
         super().__init__()
+        self.input_shape = None
+    def backward(self, gradient):
+        # 1D List   ->     3D Tensor
+        depth, height, width = self.input_shape
+        output = [
+            [[0.0 for _ in range(width)]
+                  for __ in range(height)]
+                  for ___ in range(depth)
+        ]
+        gradient_index = 0
+        for i in range(depth):
+            for j in range(height):
+                for k in range(width):
+                    output[i][j][k] = gradient[gradient_index]
+                    gradient_index += 1
+        return output
     def forward(self, input):
+        # 3D Tensor ->     1D List
         output = []
+        self.input_shape = Layer.shape(input)
         def access(_list):
             if not isinstance(_list, list):
                 output.append(_list)
@@ -251,15 +269,19 @@ layers = [
           Dense(10, 'softmax')
         ]
 Y = [0 if i != 5 else 1 for i in range(10)]
-
-output = input
-for layer_index, layer in enumerate(layers):
-    print(layer_index, "\t", output, "\t", Layer.shape(output))
-    output = layer.forward(output)
-print("OUTPUT\t", output, "\t", Layer.shape(output))
-# sparse categorical cross entropy + softmax in the output layer
-loss_gradient = [y_hat - y for y_hat, y in zip(output, Y)]
-print("Actual values\t", Y)
-print("Loss gradient\t", loss_gradient)
-b = layers[-1].backward(loss_gradient)
-print(b, Layer.shape(b))
+tt = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+print(input)
+o = layers[2].forward(input)
+print(o)
+print(layers[2].backward(tt))
+# output = input
+# for layer_index, layer in enumerate(layers):
+#     print(layer_index, "\t", output, "\t", Layer.shape(output))
+#     output = layer.forward(output)
+# print("OUTPUT\t", output, "\t", Layer.shape(output))
+# # sparse categorical cross entropy + softmax in the output layer
+# loss_gradient = [y_hat - y for y_hat, y in zip(output, Y)]
+# print("Actual values\t", Y)
+# print("Loss gradient\t", loss_gradient)
+# b = layers[-1].backward(loss_gradient)
+# print(b, Layer.shape(b))
