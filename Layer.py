@@ -139,9 +139,11 @@ class Conv2D(Layer):
         self.num_filters = filters
         self.kernel_size = kernel_size
         self.strides = strides
+        self.feature_map_size = 0
         if not (padding == 'same' or padding == 'valid'):
             raise Exception("Unknown padding format. Conv2D padding can be \'valid\' or \'same\'.")
         self.padding = padding
+        self.padding_value = 0
         self.activation_function = activation
 
     @staticmethod
@@ -157,8 +159,8 @@ class Conv2D(Layer):
                 for k in range(width):
                     padded_input[i][j + padding][k + padding] = input[i][j][k]
         return padded_input
-    def reLU(self, layer, derivative: bool = False):
-        depth, height, width = len(layer), len(layer[0]), len(layer[0][0])
+    def reLU(self, Z, derivative: bool = False):
+        depth, height, width = len(Z), len(Z[0]), len(Z[0][0])
         output  = [
             [[0.0 for _ in range(width)]
                   for __ in range(height)]
@@ -168,24 +170,61 @@ class Conv2D(Layer):
         for i in range(depth):
             for j in range(height):
                 for k in range(width):
-                    z = layer[i][j][k]
+                    z = Z[i][j][k]
                     output[i][j][k] = relu(z)
         return output
+    def backward(self, gradient):
+        depth, height, width = len(self.input), len(self.input[0]), len(self.input[0][0]) 
+        output = [[[0.0 for _ in range(width)] for __ in range(height)] for ___ in range(depth)]
+        # Initialize weight and bias deltas
+        self.weight_deltas = [
+            [
+                [
+                    [0.0 for _ in range(self.kernel_size)]
+                    for _ in range(self.kernel_size)
+                ]
+                for _ in range(depth)
+            ]
+            for _ in range(self.num_filters)
+        ]
+        self.bias_deltas = [0.0 for _ in range(self.num_filters)]
+        Z = self.preactivation
+        dA_dZ = self.activate(Z, activation=self.activation_function, derivative=True)
+        padding = self.padding_value
+        for filter_index in range(self.num_filters):
+            for feature_map_i in range(self.feature_map_size):
+                for feature_map_j in range(self.feature_map_size):
+                    da_dz = dA_dZ[filter_index][feature_map_i][feature_map_j]
+                    dL_dz = da_dz * gradient[filter_index][feature_map_i][feature_map_j]
+                    self.bias_deltas[filter_index] += dL_dz
+                    for weight_k in range(depth):
+                        for weight_i in range(self.kernel_size):
+                            for weight_j in range(self.kernel_size):
+                                weight = self.weights[filter_index][weight_k][weight_i][weight_j]
+                                input_i = feature_map_i * self.strides + weight_i - padding
+                                input_j = feature_map_j * self.strides + weight_j - padding
+                                if 0 <= input_i < height and 0 <= input_j < width:
+                                    dz_dw = self.input[weight_k][input_i][input_j]
+                                    self.weight_deltas[filter_index][weight_k][weight_i][weight_j] += dL_dz * dz_dw
+                                    output[weight_k][input_i][input_j] += dL_dz * weight
+        return output
+
 
     def forward(self, input):
         depth, height, width = len(input), len(input[0]), len(input[0][0])
+        self.input = input
         if not self.weights:
             self.weights = [
-                [
-                    [
-                        [random.uniform(-RANDOM_WEIGHT_RANGE, RANDOM_WEIGHT_RANGE)
-                        for _ in range(depth)]
-                        for _ in range(self.kernel_size)
+                        [
+                            [
+                                [random.uniform(-RANDOM_WEIGHT_RANGE, RANDOM_WEIGHT_RANGE)
+                                for _ in range(self.kernel_size)]
+                                for _ in range(self.kernel_size)
+                            ]
+                            for _ in range(depth)
+                        ]
+                        for _ in range(self.num_filters)
                     ]
-                    for _ in range(self.kernel_size)
-                ]
-                for _ in range(self.num_filters)
-            ]
         padding = 0
         if self.padding == 'same':
             # calculate the neccesary padding to maintain the input size:
@@ -200,28 +239,26 @@ class Conv2D(Layer):
         if feature_map_size % 1 != 0 or feature_map_size < 1:
             raise Exception("Feature map size must be a positive integer.")
         feature_map_size = int(feature_map_size)
+        self.feature_map_size = feature_map_size
         if padding:
             input = Conv2D.add_padding(input, padding)
-  
+        self.padding_value = padding
         for filter_index in range(self.num_filters):
             feature_map = [
                 [0.0 for _ in range(feature_map_size)] for __ in range(feature_map_size)
             ]
-            # Convolution
-            for starting_i in range(feature_map_size):
-                for starting_j in range(feature_map_size):
+            for i in range(feature_map_size):
+                for j in range(feature_map_size):
                     _sum = 0.0
-                    # Apply the kernel
-                    for weight_i in range(self.kernel_size):
-                        for weight_j in range(self.kernel_size):
-                            for input_k in range(depth):
-                                input_i = starting_i * self.strides + weight_i
-                                input_j = starting_j * self.strides + weight_j
-                                filter_weight = self.weights[filter_index][weight_i][weight_j][input_k]
-                                _sum += filter_weight * input[input_k][input_i][input_j]
+                    for input_depth_index in range(depth):
+                        for weight_i in range(self.kernel_size):
+                            for weight_j in range(self.kernel_size):
+                                input_i = i * self.strides + weight_i
+                                input_j = j * self.strides + weight_j
+                                filter_weight = self.weights[filter_index][input_depth_index][weight_i][weight_j]
+                                _sum += filter_weight * input[input_depth_index][input_i][input_j]
                     # Add bias
-                    filter_bias = self.biases[filter_index]
-                    feature_map[starting_i][starting_j] = _sum + filter_bias
+                    feature_map[i][j] = _sum + self.biases[filter_index]
             Z.append(feature_map)
         self.preactivation = Z
         self.output = self.activate(Z, self.activation_function)
@@ -269,17 +306,17 @@ layers = [
           Dense(10, 'softmax')
         ]
 Y = [0 if i != 5 else 1 for i in range(10)]
-tt = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-print(input)
-o = layers[2].forward(input)
-print(o)
-print(layers[2].backward(tt))
-# output = input
-# for layer_index, layer in enumerate(layers):
-#     print(layer_index, "\t", output, "\t", Layer.shape(output))
-#     output = layer.forward(output)
-# print("OUTPUT\t", output, "\t", Layer.shape(output))
-# # sparse categorical cross entropy + softmax in the output layer
+# tt = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+# print(input)
+# o = layers[2].forward(input)
+# print(o)
+# print(layers[2].backward(tt))
+output = input
+for layer_index, layer in enumerate(layers):
+    print(layer_index, "\t", output, "\t", Layer.shape(output))
+    output = layer.forward(output)
+print("OUTPUT\t", output, "\t", Layer.shape(output))
+# sparse categorical cross entropy + softmax in the output layer
 # loss_gradient = [y_hat - y for y_hat, y in zip(output, Y)]
 # print("Actual values\t", Y)
 # print("Loss gradient\t", loss_gradient)
