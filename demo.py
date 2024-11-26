@@ -1,4 +1,6 @@
-from CIFAR10 import CIFAR10
+# This file contains a high-level demonstration of the desired functionality.
+# The main.py file mimics this functionality.
+
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, AveragePooling2D, Flatten, Dense
 from tensorflow.keras.optimizers import SGD
