@@ -1,7 +1,8 @@
 # CNNFromScratch
+<img width="1010" alt="Screenshot 2024-11-25 at 4 50 49 PM" src="https://github.com/user-attachments/assets/ca4ce8eb-7e9a-4d3c-8c56-9fd6fff96cf4">
+  <p>Feature visualization of convolutional net trained on ImageNet from [Zeiler & Fergus 2013].</p>
 
 **CNNFromScratch** is a custom implementation of a **Convolutional Neural Network (CNN)** for recognizing and classifying images from the CIFAR-10 dataset. This project recreates functionalities similar to **TensorFlow's Sequential**, allowing the creation of models with an arbitrary number of layers, depth, and parameters.
-![image](https://github.com/user-attachments/assets/9e93e54c-41b0-4f13-85f8-f42d1611f6fe)
 
 ---
 
@@ -19,7 +20,12 @@
 ---
 
 ## **LeNet-5 Implementation**:
+
 The following example demonstrates the construction of **LeNet-5** using the `Sequential` class:
+<img width="1000" alt="image" src="https://github.com/user-attachments/assets/6f00f336-91bc-48e1-a75e-293140909a56">
+
+
+  <p>LeNet-5 model visualization to recognize gray-scale 28x28 images.</p>
 
   ```python
     from Sequential import *
@@ -74,7 +80,7 @@ The CIFAR-10 dataset consists of 60,000 32x32 color images across 10 classes, wi
   | Truck        | <img src="https://github.com/user-attachments/assets/e1544531-ea88-43c8-98de-c87d60ff6028" width="550"> |
 
 </div>
----
+
 
 # Performance
 
@@ -126,7 +132,7 @@ Vanilla Python's interpreter is significantly slower compared to libraries like 
 - **~230x** faster in backpropagation.
 - **~460x** faster in forward propagation.
 
-While slower than TensorFlow, this implementation allows experimentation with custom image sizes and shallow models.
+While it doesn't match TensorFlow's speed, the implementation unlocks creative ways to experiment with custom image dimensions and different architectures.
 
 ---
 ## Activation Functions
